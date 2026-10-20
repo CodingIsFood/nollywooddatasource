@@ -20,6 +20,11 @@ export default function AdminDashboard() {
   // Sequel removal state
   const [removingSequels, setRemovingSequels] = useState(false);
   const [sequelResult, setSequelResult] = useState(null);
+
+  // TMDb sync state
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+  const [syncLogs, setSyncLogs] = useState([]);
   
   // Form state
   const [editingId, setEditingId] = useState(null);
@@ -31,12 +36,17 @@ export default function AdminDashboard() {
     directedBy: '',
     producedBy: '',
     cast: '',
-    posterUrl: ''
+    posterUrl: '',
+    genres: ''
   });
 
   useEffect(() => {
     fetchFilms(currentPage, searchQuery);
   }, [currentPage, searchQuery]);
+
+  useEffect(() => {
+    fetchSyncStatus();
+  }, []);
 
   const fetchFilms = async (page = 1, query = '') => {
     setLoading(true);
@@ -89,6 +99,37 @@ export default function AdminDashboard() {
     } finally {
       setUploading(false);
       e.target.reset();
+    }
+  };
+
+  const fetchSyncStatus = async () => {
+    try {
+      const res = await fetch('/api/sync/status');
+      const data = await res.json();
+      setSyncLogs(data.logs || []);
+    } catch (error) {
+      console.error('Error fetching sync status:', error);
+    }
+  };
+
+  const handleRunSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch('/api/sync/tmdb', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || 'Sync failed');
+      } else {
+        setSyncResult(data);
+        fetchSyncStatus();
+        fetchFilms(currentPage, searchQuery);
+      }
+    } catch (error) {
+      console.error('Sync error:', error);
+      alert('An unexpected error occurred during sync.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -187,7 +228,8 @@ export default function AdminDashboard() {
       directedBy: film.directedBy || '',
       producedBy: film.producedBy || '',
       cast: film.cast ? film.cast.join(', ') : '',
-      posterUrl: film.posterUrl || ''
+      posterUrl: film.posterUrl || '',
+      genres: film.genres || ''
     });
   };
 
@@ -212,7 +254,8 @@ export default function AdminDashboard() {
       directedBy: '',
       producedBy: '',
       cast: '',
-      posterUrl: ''
+      posterUrl: '',
+      genres: ''
     });
   };
 
@@ -226,6 +269,45 @@ export default function AdminDashboard() {
         {/* Form Column */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
           
+          {/* TMDb Sync */}
+          <div className="film-card" style={{ height: 'fit-content' }}>
+            <h2 style={{ marginBottom: '1.5rem', fontWeight: '600' }}>TMDb Sync</h2>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', marginBottom: '1rem' }}>
+              Pulls new Nigerian films and TV shows for the current and previous year from The Movie Database. Runs automatically every Sunday; this button triggers an immediate run.
+            </p>
+            <button
+              type="button"
+              className="btn"
+              onClick={handleRunSync}
+              disabled={syncing}
+              style={{ width: '100%' }}
+            >
+              {syncing ? 'Syncing from TMDb...' : 'Run TMDb Sync Now'}
+            </button>
+            {syncResult && (
+              <div style={{ marginTop: '1rem', padding: '0.75rem', backgroundColor: 'rgba(80,250,123,0.1)', borderRadius: '8px', fontSize: '0.9rem' }}>
+                <p style={{ fontWeight: '500', color: '#50fa7b', marginBottom: '0.5rem' }}>
+                  Added {syncResult.addedCount} · Skipped {syncResult.skippedCount} · Empty overview {syncResult.skippedEmptyOverview} · Errors {syncResult.errorCount}
+                </p>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>
+                  {syncResult.yearsProcessed} · {(syncResult.durationMs / 1000).toFixed(1)}s{syncResult.incomplete ? ' · incomplete (run again)' : ''}
+                </p>
+              </div>
+            )}
+            {syncLogs.length > 0 && (
+              <div style={{ marginTop: '1rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                <p style={{ fontWeight: '600', marginBottom: '0.5rem' }}>Recent runs</p>
+                <ul style={{ paddingLeft: '1.1rem' }}>
+                  {syncLogs.map((log) => (
+                    <li key={log.id} style={{ marginBottom: '0.25rem' }}>
+                      {log.runAt ? new Date(log.runAt).toLocaleString() : 'unknown'} — {log.status}, +{log.addedCount ?? 0} added
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+
           {/* Bulk Upload CSV */}
           <div className="film-card" style={{ height: 'fit-content' }}>
             <h2 style={{ marginBottom: '1.5rem', fontWeight: '600' }}>Bulk Upload CSV</h2>
@@ -351,6 +433,11 @@ export default function AdminDashboard() {
             <div className="form-group">
               <label>Cast (comma-separated)</label>
               <input type="text" name="cast" className="form-control" value={formData.cast} onChange={handleInputChange} placeholder="e.g., Genevieve Nnaji, Ramsey Nouah" />
+            </div>
+
+            <div className="form-group">
+              <label>Genres (comma-separated)</label>
+              <input type="text" name="genres" className="form-control" value={formData.genres || ''} onChange={handleInputChange} placeholder="e.g., Drama, Romance" />
             </div>
 
             <div className="form-group">

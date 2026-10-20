@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "tmdb:preview": "node --env-file=.env.local scripts/tmdb-preview.mjs",
+    "contentful:migrate": "node --env-file=.env.local scripts/update-content-type.mjs"
   },
   "dependencies": {
     "contentful": "^11.12.5",
